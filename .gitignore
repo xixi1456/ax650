@@ -12,3 +12,9 @@ frames/
 data.txt
 tools/data*.txt
 kf_test/
+
+# Calibration raw data (large)
+handeye_calibration_data/
+tools/__pycache__/
+*.pyc
+tools/matlab.mat

@@ -12,6 +12,7 @@
  */
 
 #include "Planner.hpp"
+#include "debug_stream.hpp"
 
 namespace predict
 {
@@ -549,7 +550,20 @@ namespace predict
         Pos3D pi = coord_transformer.pw_to_pi(pw, R_world2imu);   
 
         // 计算IMU坐标系下的目标角度，并叠加机器人当前姿态
-        return {atan(pi(0, 0) / pi(2, 0)) + attitude_yaw + yaw_comp, atan(pi(1, 0) / pi(2, 0)) + attitude_pitch + pitch_comp};
+        // 注意: yaw 方向 IMU 约定逆时针=正(左转)，所以 pi_x 需要取反
+        //       目标在 IMU 右侧 → pi_x>0 → -pi_x<0 → yaw_offset 负 → 云台右转 ✓
+        Eigen::Vector2d res = {atan2(-pi(0, 0), pi(2, 0)) + attitude_yaw + yaw_comp,
+                               atan2( pi(1, 0), pi(2, 0)) + attitude_pitch + pitch_comp};
+
+        // 更新 diag 里的云台目标角度（保留已有 R_c2i/T_c2i 等字段）
+        debug::CoordDiag d = debug::DebugStream::instance().peek_coord_diag();
+        d.gimbal_yaw   = (float)(res(0) * 180.0 / M_PI);
+        d.gimbal_pitch = (float)(res(1) * 180.0 / M_PI);
+        d.imu_yaw_deg   = (float)(attitude_yaw   * 180.0 / M_PI);
+        d.imu_pitch_deg = (float)(attitude_pitch * 180.0 / M_PI);
+        debug::DebugStream::instance().update_coord_diag(d);
+
+        return res;
     }
 
     /**

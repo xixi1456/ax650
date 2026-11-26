@@ -24,8 +24,17 @@ UartDriver::UartDriver(const std::string device_name)
 
 bool UartDriver::init()
 {
-    LOGM_S("Opening %s ", m_device_name.c_str());
-    m_serial.open(m_device_name, 921600);
+    LOGM_S("[UART] Opening %s @921600 8N1", m_device_name.c_str());
+    // ⚠️ 必须显式指定 parity::none！
+    // RMCVSerial::open() 默认 parity=even, STM32 USART1 是 8N1
+    // parity 不匹配会导致 boost::asio 读串口报错, async_receive_handler 自动 close()
+    m_serial.open(m_device_name,
+                  921600,
+                  drivers::flowControlType::none,
+                  8,
+                  drivers::parityType::none,
+                  drivers::stopBitsType::one);
+    LOGM_S("[UART] port is_open()=%d", m_serial.is_open());
     return m_serial.is_open();
 }
 
@@ -47,19 +56,17 @@ void UartDriver::close()
  * - 构造临时 Attitude 对象
  * - 立即通过回调传递给业务层
  * - shoot_speed 包含在此包中，作为 RobotStatus 的一部分单独触发回调
- * - 当前示范路径读取该字段后使用临时 Mock 射速 24.5 m/s
+ * - 实机路径使用 MCU 上报的真实 shoot_speed，下限 10 m/s
  */
 void UartDriver::on_receive_imu(drivers::packet_data_t* packet_ptr, drivers::packet_length_t len)
 {
-    // 校验数据包长度
-    if (len != sizeof(pc_mcu_data_t)) {
-    //     LOGW_S("[UART][ERROR] invalid IMU data length");
-       return;
-    }
-
-    // std::cout << "Received IMU data packet, length: " << len << std::endl;
+    LOGM_S("[UART] ⚡ on_receive_imu! len=%zu sizeof(pc_mcu_data_t)=%zu",
+           len, sizeof(pc_mcu_data_t));
 
     pc_mcu_data_t* _tmp_ptr = (pc_mcu_data_t*)packet_ptr;
+    LOGM_S("[UART]   yaw=%.2f pitch=%.2f roll=%.2f shoot_speed=%.1f autoaim_mode=%d",
+           _tmp_ptr->curr_yaw, _tmp_ptr->curr_pitch, _tmp_ptr->curr_roll,
+           _tmp_ptr->shoot_speed, (int)_tmp_ptr->autoaim_mode);
 
     // 1. 构造临时的 Attitude 对象并触发回调
     Attitude temp_att{_tmp_ptr->curr_yaw, _tmp_ptr->curr_pitch, _tmp_ptr->curr_roll};
@@ -70,13 +77,9 @@ void UartDriver::on_receive_imu(drivers::packet_data_t* packet_ptr, drivers::pac
     
     // 2. shoot_speed 属于 RobotStatus，单独触发状态回调
     // 注意：这里只更新射速，其他字段由 on_receive_sts 填充
-    // 当前示范路径临时使用 Mock 射速 24.5 m/s，协议字段暂不作为实时射速输入
     if (this->status_cb_) {
         RobotStatus temp_status;
         temp_status.robot_speed_mps = _tmp_ptr->shoot_speed;
-
-        // Temporary mock path uses 24.5 m/s until the protocol source is confirmed.
-        temp_status.robot_speed_mps = 24.5f;
 
         // 确保射速不低于最小值
         if (temp_status.robot_speed_mps < MIN_BULLET_SPEED_MPS) {
@@ -101,20 +104,21 @@ void UartDriver::on_receive_imu(drivers::packet_data_t* packet_ptr, drivers::pac
  */
 void UartDriver::on_receive_sts(drivers::packet_data_t* packet_ptr, drivers::packet_length_t len)
 {
+    LOGM_S("[UART] ⚡ on_receive_sts! len=%zu sizeof(robot_data_t)=%zu",
+           len, sizeof(robot_data_t));
     // 校验数据包长度
     if (len != sizeof(robot_data_t)) {
-    //     LOGW_S("[UART][ERROR] invalid robot status data length");
+        LOGW_S("[UART][ERROR] ❌ invalid robot status data length: got=%zu expected=%zu",
+               len, sizeof(robot_data_t));
         return;
     }
-
-    // std::cout << "Received Robot Status data packet, length: " << len << std::endl;
     
     robot_data_t* state_ptr = (robot_data_t*)packet_ptr;
+    LOGM_S("[UART] robot_id=%d red_base=%d blue_base=%d",
+           state_ptr->robot_id, state_ptr->red_base_HP, state_ptr->blue_base_HP);
 
     // 构造临时的 RobotStatus 对象
     RobotStatus temp_status;
-
-    // std::cout << (int)state_ptr->robot_id << std::endl;
     
     // 根据 robot_id 判断己方颜色，从而确定敌方颜色
     // 1-20: 红方机器人，敌方是蓝色

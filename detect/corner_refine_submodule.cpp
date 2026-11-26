@@ -4,6 +4,7 @@
 //
 
 #include "corner_refine_submodule.hpp"
+#include "debug_stream.hpp"
 
 namespace detect
 {
@@ -97,7 +98,7 @@ namespace detect
 
         static std::string output_dir = "./frames/";
 
-        if (config_.debug.show_image)
+        if (config_.debug.show_image || debug::DebugStream::instance().active())
         {
             static const cv::Scalar colors[3] = {{255, 0, 0}, {0, 0, 255}, {255, 255, 255}};
             cv::Mat im2show = data->frame.clone();
@@ -124,14 +125,18 @@ namespace detect
                 dir_created = true;
             }
 
-            int key = cv::waitKey(1);
-            if (key == 'p' || key == 'P') {
-                std::string filename = output_dir + "corner_refine_" + std::to_string(data->index) + ".png";
-                cv::imwrite(filename, im2show);
+            if (config_.debug.show_image) {
+                int key = cv::waitKey(1);
+                if (key == 'p' || key == 'P') {
+                    std::string filename = output_dir + "corner_refine_" + std::to_string(data->index) + ".png";
+                    cv::imwrite(filename, im2show);
+                }
+
+                cv::imshow("corner_refine_submodule", im2show);
+                cv::waitKey(1);
             }
 
-            cv::imshow("corner_refine_submodule", im2show);
-            cv::waitKey(1);
+            debug::DebugStream::instance().update("corner", im2show);
         }
 
         auto t_opt_end = std::chrono::steady_clock::now();

@@ -282,10 +282,23 @@ bool HikCamWrapper::read(cv::Mat &src, bool debug)
 {
     if (fail_cnt > 10)
     {
+        if (debug)
+        {
+            std::cout << "HikCamWrapper: too many consecutive failures ("
+                      << fail_cnt << "), attempting reconnect..." << std::endl;
+        }
         close(debug);
         if (!init(debug))
         {
+            if (debug)
+            {
+                std::cout << "HikCamWrapper: reconnect failed, will retry on next frame" << std::endl;
+            }
             return false;
+        }
+        if (debug)
+        {
+            std::cout << "HikCamWrapper: reconnect succeeded!" << std::endl;
         }
     }
 

@@ -55,7 +55,7 @@ namespace plan
                     const pipeline::BasicTask* parent) override;
 
     private:
-        static constexpr size_t CMDARRAYLENGTH = 10;
+        static constexpr size_t CMDARRAYLENGTH = 50;
         static constexpr std::chrono::microseconds plan_period{2000};
         using command_array_t = std::array<RobotCommand, CMDARRAYLENGTH>;
         

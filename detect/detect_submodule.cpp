@@ -4,6 +4,7 @@
 //
 
 #include "detect_submodule.hpp"
+#include "debug_stream.hpp"
 #include "chrono"
 #include <iostream>
 
@@ -76,7 +77,7 @@ namespace detect
         static int frame_counter = 0;
         static std::string output_dir = "./frames/";
 
-        if (config_.debug.show_image)
+        if (config_.debug.show_image || debug::DebugStream::instance().active())
         {
             static const cv::Scalar colors[3] = {{255, 0, 0}, {0, 0, 255}, {255, 255, 255}};
             cv::Mat im2show = data->frame.clone();
@@ -96,14 +97,17 @@ namespace detect
                 dir_created = true;
             }
 
-            int key = cv::waitKey(1);
-            if (key == 'p' || key == 'P') {
-                std::string filename = output_dir + "frame_" + std::to_string(frame_counter++) + ".png";
-                cv::imwrite(filename, im2show);
+            if (config_.debug.show_image) {
+                int key = cv::waitKey(1);
+                if (key == 'p' || key == 'P') {
+                    std::string filename = output_dir + "frame_" + std::to_string(frame_counter++) + ".png";
+                    cv::imwrite(filename, im2show);
+                }
+                cv::imshow("detect_submodule", im2show);
+                cv::waitKey(1);
             }
 
-            cv::imshow("detect_submodule", im2show);
-            cv::waitKey(1);
+            debug::DebugStream::instance().update("detect", im2show);
         }
 
         if (config_.debug.log_text)

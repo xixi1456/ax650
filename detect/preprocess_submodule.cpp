@@ -4,6 +4,7 @@
 //
 
 #include "preprocess_submodule.hpp"
+#include "debug_stream.hpp"
 
 namespace detect
 {
@@ -39,6 +40,8 @@ namespace detect
             cv::imshow("detect_preprocess", data->detect_input);
             cv::waitKey(1);
         }
+
+        debug::DebugStream::instance().update("preprocess", data->detect_input);
 
         return SubModuleResult::SUCCESS;
     }

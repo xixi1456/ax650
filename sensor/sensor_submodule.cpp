@@ -4,6 +4,7 @@
 //
 
 #include "sensor_submodule.hpp"
+#include "debug_stream.hpp"
 
 // submodules
 #include <chrono>
@@ -111,10 +112,10 @@ namespace sensor
             if (config_.debug.log_text)
             {
                 LOGM_S("[sensor_submodule] Total frames handled: %d", data->index);
-                LOGM_S("[sensor_submodule] ReOpen Camera");
             }
-            video->close(config_.debug.log_text);
-            video->init(config_.debug.log_text);
+            // 相机断连后的重连由 HikCamWrapper::read() 内部的 fail_cnt>10 逻辑统一处理，
+            // 外层只做短暂退避，避免 ThreadDataPack 在 pipeline 中无 delay 空转。
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             return SubModuleResult::FAILURE;
         }
 
@@ -136,6 +137,9 @@ namespace sensor
             cv::imshow("sensor_submodule", im2show);
             cv::waitKey(1);
         }
+
+        // 推送到 MJPEG 调试流
+        debug::DebugStream::instance().update("sensor", data->frame);
 
         // 调试信息
         if (config_.debug.log_text)

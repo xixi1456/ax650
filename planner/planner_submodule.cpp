@@ -3,6 +3,7 @@
 //
 
 #include "planner_submodule.hpp"
+#include "debug_stream.hpp"
 
 namespace plan
 {
@@ -64,10 +65,36 @@ namespace plan
         // === 更新发送给下位机的控制指令 ===
         update_information_to_send(has_fixed_target, target, plan, send, attitude_yaw, attitude_pitch);
 
-        // === 可视化显示（可选） ===
+        // === 可视化显示（cv::imshow，仅在 show_image=true 时） ===
         if (config_.debug.show_image) {
-            show_real_world(target, plan, data, R_world2imu);  // 显示真实世界视图
-            show_sim(target, plan);                           // 显示仿真俯视图
+            show_real_world(target, plan, data, R_world2imu);
+            show_sim(target, plan);
+        }
+
+        // === MJPEG 调试流（独立路径，不调 imshow） ===
+        if (debug::DebugStream::instance().active()) {
+            // real-world view
+            static const cv::Scalar mj_colors[3] = {{0, 0, 255}, {255, 0, 0}, {255, 255, 255}};
+            cv::Mat mj_real = data->frame.clone();
+            Pos3D pw(target.tracked_state(2, 0), target.tracked_state(0, 0), target.tracked_state(4, 0));
+            Pos3D pc = coord_transformer.pw_to_pc(pw, R_world2imu);
+            Pos3D pu = coord_transformer.pc_to_pu(pc);
+            cv::circle(mj_real, cv::Point2d(pu(0, 0), pu(1, 0)), 5, {255, 255, 255}, 3);
+            if (target.predictor_state == TrackingState::TRACKING || target.predictor_state == TrackingState::DETECTING) {
+                auto &armor = target.tracked_armor;
+                cv::line(mj_real, armor.pts[0], armor.pts[1], mj_colors[2], 1);
+                cv::line(mj_real, armor.pts[1], armor.pts[2], mj_colors[2], 1);
+                cv::line(mj_real, armor.pts[2], armor.pts[3], mj_colors[2], 1);
+                cv::line(mj_real, armor.pts[3], armor.pts[0], mj_colors[2], 1);
+            }
+            debug::DebugStream::instance().update("planner_real", mj_real);
+
+            // sim top-down view
+            cv::Mat mj_sim = cv::Mat::zeros(1000, 1000, CV_8UC3);
+            Pos3D pw_sim(target.tracked_measurement(1, 0), target.tracked_measurement(0, 0), target.tracked_measurement(2, 0));
+            cv::Point2d p_sim(500 + pw_sim(0, 0) * 5, 500 - pw_sim(1, 0) * 5);
+            cv::circle(mj_sim, p_sim, 5, {0, 255, 0}, 3);
+            debug::DebugStream::instance().update("planner_sim", mj_sim);
         }
 
         pipeline::bridge::PlannerToSerialMessage msg{
@@ -286,6 +313,9 @@ namespace plan
 
         cv::imshow("predictor_real_world", im2show);
         cv::waitKey(1);
+
+        // MJPEG 调试流（real-world view）
+        debug::DebugStream::instance().update("planner_real", im2show);
     }
 
     /**
@@ -334,6 +364,9 @@ namespace plan
         // 显示仿真图像 
         cv::imshow("predictor_sim", hh);
         cv::waitKey(1);
+
+        // MJPEG 调试流（sim view）
+        debug::DebugStream::instance().update("planner_sim", hh);
     }                                           
 
 

@@ -165,7 +165,7 @@ private:
  * @brief   Planner 到串口控制器的命令消息
  */
 struct PlannerToSerialMessage {
-    std::array<RobotCommand, 10> command_array;
+    std::array<RobotCommand, 50> command_array;
     Attitude attitude;
     std::chrono::microseconds plan_period;
 };

@@ -389,7 +389,7 @@ namespace predict
             }
 
             auto &armor = tracked_armors[i];
-    
+
             float yaw_in_camera = 0.0f;
             Eigen::Matrix<double, 4, 1> measurement =
                 Eigen::Matrix<double, 4, 1>::Constant(std::numeric_limits<double>::quiet_NaN());
@@ -397,6 +397,12 @@ namespace predict
                 armor.pts, armor.tag_id, armor.color_id,
                 attitude_yaw, R_world2imu, yaw_in_camera, measurement);
             if (!success || !measurement.allFinite()) {
+                static int pnp_fail_count = 0;
+                if (pnp_fail_count++ % 50 == 0) {
+                    LOGW_S("[predictor] pnp_get_measurement FAIL i=%d state=%d tag_id=%d color_id=%d pts[0]=(%.0f,%.0f)",
+                           i, (int)trackers[i].get_tracker_state(), armor.tag_id, armor.color_id,
+                           armor.pts[0].x, armor.pts[0].y);
+                }
                 continue;
             }
 

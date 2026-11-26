@@ -4,6 +4,7 @@
 //
 
 #include "timed_serial.hpp"
+#include "debug_stream.hpp"
 
 namespace hardware
 {
@@ -114,21 +115,27 @@ namespace hardware
     {
         std::lock_guard<std::mutex> lock(sensor_mutex_);
         
-        // 如果新数据不是裁判系统包的默认射速，则更新射速。
-        // 否则保留已有值，避免覆盖当前示范路径的临时 Mock 射速。
-        float current_speed = latest_robot_status_.robot_speed_mps;
-        ProgramMode current_program_mode = latest_robot_status_.program_mode;
-
+        /*
+         * 两个不同来源共用 status_cb_, 用 robot_speed_mps 区分:
+         *   - 来自 on_receive_imu: 有有效 shoot_speed (!= INF_BALL_SPEED)
+         *     → 只更新 speed / program_mode, 保留 enemy_color / HP
+         *   - 来自 on_receive_sts: 没有 speed (== INF_BALL_SPEED 默认值)
+         *     → 只更新 enemy_color / HP, 保留 speed
+         *
+         * 原来 bug: else 分支只更 speed/mode, enemy_color 永远丢失;
+         *          后来改成整体复制, 又被 IMU 的默认 enemy_color 覆盖.
+         */
         constexpr float DEFAULT_SPEED = INF_BALL_SPEED;
-        if (sts.robot_speed_mps == DEFAULT_SPEED)
-        {
-            latest_robot_status_ = sts;
-            latest_robot_status_.robot_speed_mps = current_speed;
-            latest_robot_status_.program_mode = current_program_mode;
-        }
-        else {
+        if (sts.robot_speed_mps != DEFAULT_SPEED) {
+            // IMU 来的 → 只更新速度和模式
             latest_robot_status_.robot_speed_mps = sts.robot_speed_mps;
-            latest_robot_status_.program_mode = sts.program_mode;
+            latest_robot_status_.program_mode     = sts.program_mode;
+        } else {
+            // STS 来的 → 更新敌方颜色和血量, 保留速度
+            latest_robot_status_.enemy_color      = sts.enemy_color;
+            for (int i = 0; i < 6; i++)
+                latest_robot_status_.enemy[i]     = sts.enemy[i];
+            // speed 保持不变!
         }
     }
 
@@ -225,6 +232,15 @@ namespace hardware
                         command_cache_.distance,
                         command_cache_.fire_enable,
                         command_cache_.target_id);
+
+                    // 推送给 MJPEG /chart 端点画折线图
+                    debug::DebugStream::instance().update_angles(
+                        (float)attitude_cache_.yaw(),
+                        (float)attitude_cache_.pitch(),
+                        (float)(attitude_cache_.yaw() + command_cache_.yaw_angle),
+                        (float)(attitude_cache_.pitch() + command_cache_.pitch_angle),
+                        latest_robot_status_.program_mode == ProgramMode::AUTO_AIM,
+                        command_cache_.target_id != 0);
 
                     if (config_.debug.log_text)
                     {

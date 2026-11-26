@@ -15,6 +15,7 @@
 
 
 #include "main.hpp"
+#include "debug_stream.hpp"
 
 
 std::atomic<bool> g_stop_request{false};
@@ -135,6 +136,21 @@ bool init(void)
     planner_config.debug.log_text = parser.get_bool("planner_log_text");
     planner_config.debug.log_file = parser.get_bool("planner_log_file");
     planner_config.debug.show_image = parser.get_bool("planner_show_image");
+
+    // MJPEG 调试服务器
+    int debug_stream_port = 0;
+    try { debug_stream_port = std::stoi(parser.get_string("debug_stream_port")); }
+    catch (...) { debug_stream_port = 0; }
+    if (debug_stream_port > 0) {
+        debug::DebugStream::instance().start(debug_stream_port);
+        LOGM_S("[init] MJPEG debug stream on port %d", debug_stream_port);
+        debug::DebugStream::instance().set_label("sensor", "🎥 Sensor");
+        debug::DebugStream::instance().set_label("preprocess", "🔲 Preprocess");
+        debug::DebugStream::instance().set_label("detect", "🎯 Detect");
+        debug::DebugStream::instance().set_label("corner", "📐 Corner Refine");
+        debug::DebugStream::instance().set_label("planner_real", "🛰️ Planner (real)");
+        debug::DebugStream::instance().set_label("planner_sim", "🗺️ Planner (sim)");
+    }
 
     bool entrystage_submodule_registered = false;
     bool sensor_submodule_registered = false;
@@ -367,5 +383,9 @@ int main(void)
     
     // 销毁 CoordTransformer 单例
     mathutils::CoordTransformer::Destroy();
+
+    // 停止 MJPEG 调试服务器
+    debug::DebugStream::instance().stop();
+
     return 0;
 }

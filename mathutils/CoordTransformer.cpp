@@ -6,6 +6,7 @@
  */
 
 #include "CoordTransformer.hpp"
+#include "debug_stream.hpp"
 
 namespace mathutils
 {
@@ -232,6 +233,21 @@ namespace mathutils
         // 绝对偏航角 = 相机坐标系中的偏航角 - 机器人姿态偏航角， [-pi, pi]
         measurement << pw[1], pw[0], pw[2], mathutils::limit_rad(yaw_in_camera - attitude_yaw);
         // measurement << pw[1], pw[0], pw[2], yaw_in_camera - attitude_yaw;
+
+        // === 推送坐标变换诊断（给 /diag 端点）===
+        debug::CoordDiag d;
+        d.valid = true;
+        d.pc_x = (float)pc[0]; d.pc_y = (float)pc[1]; d.pc_z = (float)pc[2];
+        d.pi_x = (float)pi[0]; d.pi_y = (float)pi[1]; d.pi_z = (float)pi[2];
+        d.pw_x = (float)pw[0]; d.pw_y = (float)pw[1]; d.pw_z = (float)pw[2];
+        for (int i = 0; i < 9; i++) {
+            d.R_c2i[i] = (float)R_camera2imu.data()[i];
+            d.R_world2imu[i] = (float)R_world2imu.data()[i];
+        }
+        d.T_c2i[0] = (float)T_camera2imu[0];
+        d.T_c2i[1] = (float)T_camera2imu[1];
+        d.T_c2i[2] = (float)T_camera2imu[2];
+        debug::DebugStream::instance().update_coord_diag(d);
 
         return true;
     }
